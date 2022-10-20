@@ -15,8 +15,11 @@ class SoccerMatch():
         """
 
         self.start = None
+        self.season = ""
         self.team1 = ""
         self.team2 = ""
+        self.team1_score = ""
+        self.team2_score = ""
         self.team1_odds = ""
         self.team2_odds = ""
         self.draw_odds = ""
@@ -33,6 +36,16 @@ class SoccerMatch():
 
         self.start = datetime.strptime(start_time_str, "%d %b %Y %H:%M")
 
+    def set_season(self, season):
+        """
+        Set the match's season.
+
+        Args:
+            season (str): String representing season.
+        """
+
+        self.season = season
+
     def set_teams(self, participants):
         """
         Set the match's participating teams.
@@ -44,6 +57,17 @@ class SoccerMatch():
 
         self.team1 = participants[0]
         self.team2 = participants[1]
+
+    def set_scores(self, scores):
+        """
+        Set the match's team 1 and team 2 scores.
+
+        Args:
+            scores (list of int): Team 1 and team 2 scores, in that order.
+        """
+
+        self.team1_score = scores[0]
+        self.team2_score = scores[1]
 
     def set_outcome_from_scores(self, scores):
         """
@@ -100,7 +124,39 @@ class SoccerMatch():
 
         if self.start is None:
             return 0
-        return (90 * MINUTES_TO_SECONDS) + int(time.mktime(self.start.timetuple()))
+        return (90 * MINUTES_TO_SECONDS) + int(
+            time.mktime(self.start.timetuple())
+        )
+
+    def get_season(self):
+        """
+        Get the match's season.
+
+        Args:
+            season (str): String representing season.
+        """
+
+        return self.season
+
+    def get_team1_score(self):
+        """
+        Get the score of team1.
+
+        Returns:
+            (str) score of team 1.
+        """
+
+        return self.team1_score
+
+    def get_team2_score(self):
+        """
+        Get the score of team2.
+
+        Returns:
+            (str) score of team 2.
+        """
+
+        return self.team2_score
 
     def get_team1_string(self):
         """

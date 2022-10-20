@@ -29,10 +29,12 @@ class DatabaseManager():
             self.cursor.execute('''DROP TABLE IF EXISTS matches''')
             self.cursor.execute('''CREATE TABLE matches
                                     (league text, area text,
-                                    retrieved_from_url text, start_time integer,
-                                    end_time integer, team1 text, team2 text,
-                                    outcome text, team1_odds real,
-                                    team2_odds real, draw_odds real)''')
+                                    retrieved_from_url text, season text,
+                                    start_time integer, end_time integer,
+                                    team1 text, team2 text, team1_score text,
+                                    team2_score text, outcome text,
+                                    team1_odds real, team2_odds real,
+                                    draw_odds real)''')
             self.conn.commit()
 
     def add_soccer_match(self, league, retrieved_from_url, match):
@@ -50,16 +52,18 @@ class DatabaseManager():
         sql_str = "INSERT INTO matches VALUES ('"
         sql_str += league["league"] + "', '"
         sql_str += league["area"] + "', '"
-        sql_str += retrieved_from_url + "', "
+        sql_str += retrieved_from_url + "', '"
+        sql_str += str(match.get_season()) + "', "
         sql_str += str(match.get_start_time_unix_int()) + ", "
         sql_str += str(match.get_end_time_unix_int()) + ", '"
         sql_str += match.get_team1_string() + "', '"
         sql_str += match.get_team2_string() + "', '"
+        sql_str += str(match.get_team1_score()) + "', '"
+        sql_str += str(match.get_team2_score()) + "', '"
         sql_str += match.get_outcome_string() + "', '"
         sql_str += str(match.get_team1_odds()) + "', '"
         sql_str += str(match.get_team2_odds()) + "', '"
         sql_str += str(match.get_draw_odds()) + "')"
-
         self.cursor.execute(sql_str)
         self.conn.commit()
 

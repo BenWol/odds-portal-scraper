@@ -4,6 +4,7 @@ Soccer match results scraping object.
 
 from bs4 import BeautifulSoup
 from DbManager import DatabaseManager
+from DfManager import DataframeManager
 import json
 import re
 import time
@@ -24,9 +25,10 @@ class Scraper():
             initialize_db (bool): Should the database be initialized?
         """
 
-        self.browser = webdriver.Chrome("./chromedriver/chromedriver")
+        self.browser = webdriver.Chrome("/usr/local/bin/chromedriver")
         self.league = self.parse_json(league_json)
         self.db_manager = DatabaseManager(initialize_db)
+        self.df_manager = DataframeManager(initialize_db)
 
     def parse_json(self, json_str):
         """
@@ -56,6 +58,17 @@ class Scraper():
             print(output_str)
 
         for url in self.league["urls"]:
+            if do_verbose_output:
+                list_season_str = [
+                    ele for ele in url.split("/")
+                    if ele.startswith('bundesliga')
+                ]
+                if len(list_season_str) == 0:
+                    season_str = "Bundesliga this year"
+                else:
+                    season_str = list_season_str[0]
+                print(f"Starting season {season_str} ...")
+
             # loop through all pages in that season
             page = 1
             while self.scrape_url("#/page/".join((url, "{}/".format(page)))):
@@ -64,10 +77,13 @@ class Scraper():
                 page += 1
 
             if do_verbose_output:
-                print("Finished season")
+                print(f"Finished season {season_str}!")
+                print("\n")
 
+        self.browser.quit()
 
-        self.browser.close()
+        # keep dataframe in cache of class
+        self.df_manager.keep_dataset()
 
         if do_verbose_output is True:
             print("Done scraping this league.")
@@ -110,13 +126,45 @@ class Scraper():
                 this_match = SoccerMatch()
                 game_datetime_str = current_date_str + " " + self.get_time(row)
                 this_match.set_start(game_datetime_str)
+                season = self.get_season(row)
+                this_match.set_season(season)
                 participants = self.get_participants(row)
                 this_match.set_teams(participants)
-                scores = self.get_scores(row)
+                try:
+                    scores = self.get_scores(row)
+                except:
+                    if (
+                        participants == ['Bayern Munich', 'Freiburg']
+                    ) and (
+                        game_datetime_str == '13 Mar 2010 16:30'
+                    ):
+                        scores = [2, 1]
+                    elif (
+                        participants == [
+                            'Hertha Berlin', 'B. Monchengladbach'
+                        ]
+                    ) and (
+                        game_datetime_str == '23 Jan 2010 13:30'
+                    ):
+                        scores = [0, 0]
+                    elif (
+                        participants == [
+                            'Bayern Munich', 'Hoffenheim'
+                        ]
+                    ) and (
+                        game_datetime_str == '15 Jan 2010 18:30'
+                    ):
+                        scores = [2, 0]
+                    else:
+                        import pdb; pdb.set_trace()
+                this_match.set_scores(scores)
                 this_match.set_outcome_from_scores(scores)
                 odds = self.get_odds(row)
                 this_match.set_odds(odds)
+                # extra_info = self.get_extra_info(row)
+                # this_match.set_extra_info(extra_info)
                 self.db_manager.add_soccer_match(self.league, url, this_match)
+                self.df_manager.add_soccer_match(self.league, url, this_match)
 
         return True
 
@@ -193,6 +241,8 @@ class Scraper():
             return "Today"
         elif this_date.endswith(" - Play Offs"):
             this_date = this_date[:-12]
+        elif this_date.endswith(" - Relegation"):
+            this_date = this_date[:-12]
         return this_date
 
     def get_time(self, tag):
@@ -222,9 +272,32 @@ class Scraper():
 
         parsed_strings = tag.find(class_="table-participant").text.split(" - ")
         participants = []
-        participants.append(parsed_strings[0])
-        participants.append(parsed_strings[-1])
+        participants.append(parsed_strings[0].replace('\xa0', ''))
+        participants.append(parsed_strings[-1].replace('\xa0', ''))
         return participants
+
+    def get_season(self, tag):
+        """
+        Extract the season the match is played in from an HTML tag for a
+        soccer match row.
+
+        Args:
+            tag (obj): HTML tag object from BeautifulSoup.
+
+        Returns:
+            (str) season.
+        """
+
+        parsed_href_elements = tag.find(
+            class_="table-participant"
+        ).contents[0].attrs['href'].split('/')
+
+        for ele in parsed_href_elements:
+            if ele.startswith('bundesliga'):
+                return "-".join(ele.split('-')[1:])
+
+        return ""
+        
 
     def get_scores(self, tag):
         """
@@ -235,7 +308,7 @@ class Scraper():
             tag (obj): HTML tag object from BeautifulSoup.
 
         Returns:
-            (list of str) Extracted match scores.
+            (list of int) Extracted match scores.
         """
 
         score_str = tag.find(class_="table-score").string

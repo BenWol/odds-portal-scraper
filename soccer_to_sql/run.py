@@ -12,7 +12,7 @@ soccer_match_path = "." + sep + "leagues" + sep + "soccer"
 initialize_db = True
 
 for possible_file in listdir(soccer_match_path):
-    if isfile(join(soccer_match_path, possible_file)):
+    if isfile(join(soccer_match_path, possible_file)) and possible_file.endswith('bundesliga.json'):
         soccer_match_json_file = join(soccer_match_path, possible_file)
         with open(soccer_match_json_file, "r") as open_json_file:
             json_str = open_json_file.read().replace("\n", "")
@@ -20,3 +20,5 @@ for possible_file in listdir(soccer_match_path):
             match_scraper.scrape_all_urls(True)
             if initialize_db is True:
                 initialize_db = False
+
+match_scraper.df_manager.save_cached_df_as_parquet()
