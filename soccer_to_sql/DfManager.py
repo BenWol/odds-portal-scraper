@@ -1,7 +1,6 @@
 """
 Manager class to handle pandas dataframe.
 """
-import os
 import pandas as pd
 from typing import Optional
 
