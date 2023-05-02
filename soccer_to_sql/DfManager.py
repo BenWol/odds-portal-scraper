@@ -4,7 +4,7 @@ Manager class to handle pandas dataframe.
 import pandas as pd
 from typing import Optional
 
-DF_FILENAME = "df_oddsportal_next.parquet"
+DF_FILENAME = "df_oddsportal.parquet"
 
 class DataframeManager():
 

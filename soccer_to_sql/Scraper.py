@@ -163,7 +163,10 @@ class Scraper():
                     game_datetime_str = (
                         current_date_str + " " + self.get_time(row)
                     )
-                    this_match.set_start(game_datetime_str)
+                    try:
+                        this_match.set_start(game_datetime_str)
+                    except:
+                        import pdb; pdb.set_trace()
                     this_match.set_season(season)
                     this_match.set_game_type(game_type)
                     participants = self.get_participants(row)
@@ -401,7 +404,7 @@ class Scraper():
 
         return tag.find(
             class_="flex min-w-[100%] next-m:!min-w-[30px]"
-        ).text.strip()
+        ).text.strip().split(" ")[0]
 
     def get_participants(self, tag):
         """
