@@ -9,7 +9,9 @@ import json
 import re
 import time
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from SoccerMatch import SoccerMatch
+from datetime import datetime, timedelta
 
 class Scraper():
 
@@ -24,8 +26,13 @@ class Scraper():
                 Scraper.
             initialize_db (bool): Should the database be initialized?
         """
+        # chrome options
+        chrome_options = Options()
+        # chrome_options.add_argument("--start-maximized")
+        chrome_options.add_experimental_option("useAutomationExtension", False)
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
-        self.browser = webdriver.Chrome("/usr/local/bin/chromedriver")
+        self.browser = webdriver.Chrome("/usr/local/bin/chromedriver", chrome_options=chrome_options)
         self.league = self.parse_json(league_json)
         self.db_manager = DatabaseManager(initialize_db)
         self.df_manager = DataframeManager(initialize_db)
@@ -106,71 +113,134 @@ class Scraper():
         # needed or else the data won't be complete
         delay = 5 # seconds
         time.sleep(delay)
+        # add window scroll
+        self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+        time.sleep(1)
+        self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+        time.sleep(1)
 
-        tournament_tbl = self.browser.find_element_by_id("tournamentTable")
+        # let's go
+        tournament_tbl = self.browser.find_element_by_xpath(
+            "//div[@class='flex flex-col px-3 text-sm max-mm:px-0']"
+        )
         tournament_tbl_html = tournament_tbl.get_attribute("innerHTML")
         tournament_tbl_soup = BeautifulSoup(tournament_tbl_html, "html.parser")
+
+        # get season
         try:
-            significant_rows = tournament_tbl_soup(self.is_soccer_match_or_date)
+            season = self.get_season(tournament_tbl_soup)
         except:
+            # no more matches displayed per season
             return False
 
+        # get significant rows
+        significant_rows = tournament_tbl_soup.find_all(
+            "div", {"class": "flex flex-col w-full text-xs eventRow"}
+        )
+
+        # start extracting information of significant match rows
         current_date_str = None
-        for row in significant_rows:
-            if self.is_date(row) is True:
-                current_date_str = self.get_date(row)
-            elif self.is_date_string_supported(current_date_str) == False:
-                # not presently supported
-                continue
-            else:  # is a soccer match
-                this_match = SoccerMatch()
-                game_datetime_str = current_date_str + " " + self.get_time(row)
-                this_match.set_start(game_datetime_str)
-                season = self.get_season(row)
-                this_match.set_season(season)
-                participants = self.get_participants(row)
-                this_match.set_teams(participants)
-                try:
-                    scores = self.get_scores(row)
-                except:
-                    if (
-                        participants == ['Bayern Munich', 'Freiburg']
-                    ) and (
-                        game_datetime_str == '13 Mar 2010 16:30'
-                    ):
-                        scores = [2, 1]
-                    elif (
-                        participants == [
-                            'Hertha Berlin', 'B. Monchengladbach'
-                        ]
-                    ) and (
-                        game_datetime_str == '23 Jan 2010 13:30'
-                    ):
-                        scores = [0, 0]
-                    elif (
-                        participants == [
-                            'Bayern Munich', 'Hoffenheim'
-                        ]
-                    ) and (
-                        game_datetime_str == '15 Jan 2010 18:30'
-                    ):
-                        scores = [2, 0]
+        counter = 0
+        catched_rows = len(significant_rows)
+        for block in significant_rows:
+            game_type = 'leaque'
+            sub_rows = block.find_all("div", recursive=False)
+            counter_2 = 0
+            for row in sub_rows:
+                if self.is_date(row):
+                    current_date_str = self.get_date(row)
+                    if self.check_if_leaque_game(row) == False:
+                        game_type = 'promotion'
+                elif (
+                    self.is_date_string_supported(current_date_str) == False
+                ) and (counter_2 > 0):
+                    # not presently supported
+                    print(f"'{current_date_str}' currently not supported.")
+                    continue
+                elif self.is_match_and_time(row):
+                    # is a soccer match w/ date
+                    this_match = SoccerMatch()
+                    game_datetime_str = (
+                        current_date_str + " " + self.get_time(row)
+                    )
+                    this_match.set_start(game_datetime_str)
+                    this_match.set_season(season)
+                    this_match.set_game_type(game_type)
+                    participants = self.get_participants(row)
+                    if game_type == 'promotion':
+                        print(
+                            f"Match between {participants} on the "
+                            f"{current_date_str} is a promotion game."
+                        )
+                    this_match.set_teams(participants)
+                    try:
+                        scores = self.get_scores(row)
+                    except:
+                        if (
+                            participants == ['Bayern Munich', 'Freiburg']
+                        ) and (
+                            game_datetime_str == '13 Mar 2010 16:30'
+                        ):
+                            scores = [2, 1]
+                        elif (
+                            participants == [
+                                'Hertha Berlin', 'B. Monchengladbach'
+                            ]
+                        ) and (
+                            game_datetime_str == '23 Jan 2010 13:30'
+                        ):
+                            scores = [0, 0]
+                        elif (
+                            participants == [
+                                'Bayern Munich', 'Hoffenheim'
+                            ]
+                        ) and (
+                            game_datetime_str == '15 Jan 2010 18:30'
+                        ):
+                            scores = [2, 0]
+                        else:
+                            import pdb; pdb.set_trace()
+                    this_match.set_scores(scores)
+                    this_match.set_outcome_from_scores(scores)
+                    odds = self.get_odds(row)
+                    if len(odds) == 0:
+                        # if no odds available, don't save the match
+                        continue
                     else:
-                        import pdb; pdb.set_trace()
-                this_match.set_scores(scores)
-                this_match.set_outcome_from_scores(scores)
-                odds = self.get_odds(row)
-                this_match.set_odds(odds)
-                # extra_info = self.get_extra_info(row)
-                # this_match.set_extra_info(extra_info)
-                self.db_manager.add_soccer_match(self.league, url, this_match)
-                self.df_manager.add_soccer_match(self.league, url, this_match)
+                        this_match.set_odds(odds)
+
+                    # save match as data point
+                    self.db_manager.add_soccer_match(
+                        self.league, url, this_match
+                    )
+                    self.df_manager.add_soccer_match(
+                        self.league, url, this_match
+                    )
+                counter_2 += 1
+            counter += 1
+        
+        # rows successfully extracted
+        print(f"{counter}/{catched_rows} matches were scraped!")
+
+        # duplicated rows produced -> page not revewed under new page number
+        duplicates = self.df_manager.df.duplicated(
+            subset=[
+                col for col in self.df_manager.df.columns
+                if col != 'retrieved_from_url'
+            ], keep = 'first'
+        )
+        if duplicates.any():
+            # clean duplicates & keep first
+            self.df_manager.df = (
+                self.df_manager.df[duplicates].reset_index(drop=True)
+            )
+            return False
 
         return True
 
-    def is_soccer_match_or_date(self, tag):
+    def is_soccer_match_with_date(self, tag):
         """
-        Determine whether a provided HTML tag is a row for a soccer match or
+        Determine whether a provided HTML tag is a row for a soccer match 
         date.
 
         Args:
@@ -179,12 +249,13 @@ class Scraper():
         Returns:
             (bool)
         """
-
         if tag.name != "tr":
             return False
-        if "center" in tag["class"] and "nob-border" in tag["class"]:
+        if tag.has_attr("xeid"):
+            # for match lines without class tag
             return True
-        if "deactivate" in tag["class"] and tag.has_attr("xeid"):
+        if "center" in tag["class"] and "nob-border" in tag["class"]:
+            # for grey datelines
             return True
         return False
 
@@ -198,8 +269,16 @@ class Scraper():
         Returns:
             (bool)
         """
-
-        return "center" in tag["class"] and "nob-border" in tag["class"]
+        if tag.has_attr("class"):
+            return (
+                "border-l" in tag["class"]
+            ) and (
+                "border-r" in tag["class"]
+            ) and (
+                "min-h-[30px]" in tag["class"]
+            )
+        else:
+            return False
 
     def is_date_string_supported(self, date_string):
         """
@@ -223,6 +302,8 @@ class Scraper():
             return False
         elif "Promotion" in date_string:
             return False
+        elif "Relegation" in date_string:
+            return False
         return True
 
     def get_date(self, tag):
@@ -236,14 +317,76 @@ class Scraper():
             (str) Extracted date string.
         """
 
-        this_date = tag.find(class_="datet").string
+        this_date = tag.find(
+            class_=(
+                "w-full text-xs font-normal leading-5 text-black-main "
+                "font-main"
+            )
+        ).string.strip()
         if "Today" in this_date:
-            return "Today"
+            return datetime.today().strftime("%d %b %Y")
+        elif "Tomorrow" in this_date:
+            return (datetime.today() + timedelta(days=1)).strftime("%d %b %Y")
+        elif "Yesterday" in this_date:
+            return (datetime.today() + timedelta(days=-1)).strftime("%d %b %Y")
         elif this_date.endswith(" - Play Offs"):
-            this_date = this_date[:-12]
+            return " ".join(this_date.split(" ")[:3])
         elif this_date.endswith(" - Relegation"):
-            this_date = this_date[:-12]
+            return " ".join(this_date.split(" ")[:3])
+        elif this_date.endswith("Promotion"):
+            return " ".join(this_date.split(" ")[:3])
         return this_date
+    
+    def check_if_leaque_game(self, tag):
+        """
+        Check if leaque or promotion game from an HTML tag for a date row.
+
+        Args:
+            tag (obj): HTML tag object from BeautifulSoup.
+
+        Returns:
+            (bool) Extracted boolean.
+        """
+
+        this_date = tag.find(
+            class_=(
+                "w-full text-xs font-normal leading-5 text-black-main "
+                "font-main"
+            )
+        ).string.strip()
+
+        # check if date string ends with word related to promotion game
+        if (
+            this_date.endswith("Play Offs")
+        ) or (
+            this_date.endswith("Relegation")
+        ) or (
+            this_date.endswith("Promotion")
+        ):
+            return False
+        return True
+    
+    def is_match_and_time(self, tag):
+        """
+        Determine whether a provided HTML tag is a row containing a match and
+        its time of the day.
+
+        Args:
+            tag (obj): HTML tag object from BeautifulSoup.
+
+        Returns:
+            (bool)
+        """
+        if tag.has_attr("class"):
+            return (
+                "border-black-borders" in tag["class"]
+            ) and (
+                "border-l" not in tag["class"]
+            ) and (
+                "flex-col" in tag["class"]
+            )
+        else:
+            return False
 
     def get_time(self, tag):
         """
@@ -256,7 +399,9 @@ class Scraper():
             (str) Extracted time.
         """
 
-        return tag.find(class_="datet").string
+        return tag.find(
+            class_="flex min-w-[100%] next-m:!min-w-[30px]"
+        ).text.strip()
 
     def get_participants(self, tag):
         """
@@ -269,11 +414,20 @@ class Scraper():
         Returns:
             (list of str) Extracted match participants.
         """
-
-        parsed_strings = tag.find(class_="table-participant").text.split(" - ")
         participants = []
-        participants.append(parsed_strings[0].replace('\xa0', ''))
-        participants.append(parsed_strings[-1].replace('\xa0', ''))
+        participants.append(tag.find(
+            class_=(
+                "flex items-start justify-start min-w-0 gap-1 cursor-pointer "
+                "justify-content next-m:!items-center next-m:!justify-center "
+                "min-sm:min-w-[180px] next-m:!gap-2"
+            )
+        ).find('div').text.strip())
+        participants.append(tag.find(
+            class_=(
+                "min-w-[0] gap-1 flex justify-content items-center "
+                "cursor-pointer next-m:!gap-2 min-sm:min-w-[180px]"
+            )
+        ).find('div').text.strip())
         return participants
 
     def get_season(self, tag):
@@ -288,16 +442,25 @@ class Scraper():
             (str) season.
         """
 
-        parsed_href_elements = tag.find(
-            class_="table-participant"
-        ).contents[0].attrs['href'].split('/')
+        season_element = tag.find(
+            class_=(
+                "flex items-center justify-start min-h-[40px] "
+                "bg-gray-med_light "
+                "w-full gap-1 bg-gray-med_light text-black-main"
+            )
+        ).find(
+            class_=(
+                "text-xs font-normal truncate"
+            )
+        ).text.strip()
 
-        for ele in parsed_href_elements:
-            if ele.startswith('bundesliga'):
-                return "-".join(ele.split('-')[1:])
-
+        if 'Bundesliga' in season_element:
+            season_elements = season_element.split(' ')
+            if len(season_elements) == 1:
+                return "xx/xx"
+            else:
+                return season_elements[-1]
         return ""
-        
 
     def get_scores(self, tag):
         """
@@ -310,14 +473,17 @@ class Scraper():
         Returns:
             (list of int) Extracted match scores.
         """
-
-        score_str = tag.find(class_="table-score").string
-        if self.is_invalid_game_from_score_string(score_str):
-            return [-1,-1]
-        non_decimal = re.compile(r"[^\d]+")
-        score_str = non_decimal.sub(" ", score_str)
-        scores = [int(s) for s in score_str.split()]
-        return scores
+        score_block = tag.find(class_="flex gap-1 font-bold font-bold")
+        if score_block is None:
+            return [-1, -1]
+        # score_str = tag.find(class_="table-score").string
+        # if self.is_invalid_game_from_score_string(score_str):
+        #     return [-1,-1]
+        else:
+            score_rows = score_block.find_all("div")
+            score_home = score_rows[0].text.strip()
+            score_away = score_rows[-1].text.strip()
+        return [score_home, score_away]
 
     def get_odds(self, tag):
         """
@@ -331,26 +497,31 @@ class Scraper():
             (list of str) Extracted match odds.
         """
 
-        odds_cells = tag.find_all(class_="odds-nowrp")
+        odds_cells = tag.find_all(class_=(
+            "cursor-pointer next-m:min-w-[80%] next-m:min-h-[26px] "
+            "next-m:max-h-[26px] flex justify-center items-center "
+            "font-bold hover:border hover:border-orange-main min-w-[50px] "
+            "min-h-[50px]"
+        ))
         odds = []
         for cell in odds_cells:
-            odds.append(cell.text)
+            odds.append(cell.find('p').string.strip())
         return odds
 
-    def is_invalid_game_from_score_string(self, score_str):
-        """
-        Assess, from the score string extracted from a soccer match row,
-        whether a game actually paid out one of the bet outcomes.
+    # def is_invalid_game_from_score_string(self, score_str):
+    #     """
+    #     Assess, from the score string extracted from a soccer match row,
+    #     whether a game actually paid out one of the bet outcomes.
 
-        Args:
-            score_str (str): Score string to assess.
+    #     Args:
+    #         score_str (str): Score string to assess.
 
-        Returns:
-            (bool)
-        """
+    #     Returns:
+    #         (bool)
+    #     """
 
-        if score_str == "postp.":
-            return True
-        elif score_str == "canc.":
-            return True
-        return False
+    #     if score_str == "postp.":
+    #         return True
+    #     elif score_str == "canc.":
+    #         return True
+    #     return False

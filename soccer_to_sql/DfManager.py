@@ -4,7 +4,7 @@ Manager class to handle pandas dataframe.
 import pandas as pd
 from typing import Optional
 
-DF_FILENAME = "df_oddsportal.parquet"
+DF_FILENAME = "df_oddsportal_next.parquet"
 
 class DataframeManager():
 
@@ -28,6 +28,7 @@ class DataframeManager():
                 'area',
                 'retrieved_from_url',
                 'season',
+                'game_type',
                 'start_time',
                 'end_time',
                 'team1',
@@ -60,6 +61,7 @@ class DataframeManager():
                 'area': league["area"],
                 'retrieved_from_url': retrieved_from_url,
                 'season': match.get_season(),
+                'game_type': match.get_game_type_string(),
                 'start_time': match.get_start_time_unix_int(),
                 'end_time': match.get_end_time_unix_int(),
                 'team1': match.get_team1_string(),

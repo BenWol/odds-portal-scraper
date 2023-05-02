@@ -5,7 +5,7 @@ Manager class to handle database interactions.
 import os
 import sqlite3
 
-DB_FILENAME = "oddsportal.db"
+DB_FILENAME = "oddsportal_next.db"
 
 class DatabaseManager():
 
@@ -30,6 +30,7 @@ class DatabaseManager():
             self.cursor.execute('''CREATE TABLE matches
                                     (league text, area text,
                                     retrieved_from_url text, season text,
+                                    game_type text,
                                     start_time integer, end_time integer,
                                     team1 text, team2 text, team1_score text,
                                     team2_score text, outcome text,
@@ -53,7 +54,8 @@ class DatabaseManager():
         sql_str += league["league"] + "', '"
         sql_str += league["area"] + "', '"
         sql_str += retrieved_from_url + "', '"
-        sql_str += str(match.get_season()) + "', "
+        sql_str += str(match.get_season()) + "', '"
+        sql_str += str(match.get_game_type_string()) + "', "
         sql_str += str(match.get_start_time_unix_int()) + ", "
         sql_str += str(match.get_end_time_unix_int()) + ", '"
         sql_str += match.get_team1_string() + "', '"

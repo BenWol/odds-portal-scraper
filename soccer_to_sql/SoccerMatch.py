@@ -24,6 +24,7 @@ class SoccerMatch():
         self.team2_odds = ""
         self.draw_odds = ""
         self.outcome = ""
+        self.game_type = ""
 
     def set_start(self, start_time_str):
         """
@@ -33,7 +34,6 @@ class SoccerMatch():
             start_time_str (str): String representing the match start time,
                 expected in the format of "%d %b %Y %H:%M".
         """
-
         self.start = datetime.strptime(start_time_str, "%d %b %Y %H:%M")
 
     def set_season(self, season):
@@ -44,7 +44,14 @@ class SoccerMatch():
             season (str): String representing season.
         """
 
-        self.season = season
+        # check if season is given
+        if season == "xx/xx":
+            if self.start.month in range(0,7):
+                self.season = f"{self.start.year-1}/{self.start.year}"
+            else:
+                self.season = f"{self.start.year}/{self.start.year+1}"
+        else:
+            self.season = season
 
     def set_teams(self, participants):
         """
@@ -101,6 +108,16 @@ class SoccerMatch():
         self.draw_odds = odds[1]
         self.team2_odds = odds[2]
 
+    def set_game_type(self, game_type):
+        """
+        Set the game type field.
+
+        Args:
+            game_type (string): Game type, , i.e. 'leaque' or 'promotion'.
+        """
+
+        self.game_type = game_type
+
     def get_start_time_unix_int(self):
         """
         Get the start time of a match, as a Unix format timestamp (GMT+5).
@@ -116,7 +133,8 @@ class SoccerMatch():
     def get_end_time_unix_int(self):
         """
         Get the estimated end time of a game, where the estimate is the start
-        time plus 90 minutes, as a Unix format timestamp (GMT+5).
+        time plus 90 minutes and 15 minutes break, as a Unix format timestamp
+        (GMT+5).
 
         Returns:
             (int) Estimated end time as a Unix timestamp.
@@ -124,7 +142,7 @@ class SoccerMatch():
 
         if self.start is None:
             return 0
-        return (90 * MINUTES_TO_SECONDS) + int(
+        return ((90 + 15) * MINUTES_TO_SECONDS) + int(
             time.mktime(self.start.timetuple())
         )
 
@@ -218,3 +236,13 @@ class SoccerMatch():
         """
 
         return self.outcome
+    
+    def get_game_type_string(self):
+        """
+        Get the game type as a string.
+
+        Return:
+            (str) Game type string, i.e. 'leaque' or 'promotion'.
+        """
+
+        return self.game_type
